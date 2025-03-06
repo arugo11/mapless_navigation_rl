@@ -34,12 +34,13 @@ def run_training_instance(instance_id, num_episodes, log_dir, custom_args=None):
     
     # ros2 launch コマンドを構築
     cmd = [
-        "ros2", "launch", "mapless_navigation_rl", "training.launch.py",
+        "ros2", "launch", "mapless_navigation_rl", "training.launch.py"
     ]
     
     # カスタム引数があれば追加
     if custom_args:
-        cmd.extend(custom_args)
+        for arg in custom_args:
+            cmd.append(arg)
     
     # プロセスを開始
     log_file = open(f"{log_dir}/training_instance_{instance_id}.log", "w")
@@ -87,6 +88,9 @@ def main():
                 args=(i, args.num_episodes, log_dir, custom_args)
             )
             results.append(result)
+            
+            # 競合を防ぐため、次のインスタンス起動前に少し待機
+            time.sleep(5)
         
         # すべての結果を待つ
         for result in results:
