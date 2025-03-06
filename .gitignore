@@ -1,0 +1,64 @@
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+venv/
+ENV/
+.env
+
+# ROS2関連
+install/
+log/
+.colcon_cd_root
+COLCON_IGNORE
+
+# 機械学習モデルと訓練データ
+*.h5
+*.pth
+*.pt
+*.pkl
+*.npz
+*.npy
+
+# 訓練結果
+models/
+results/
+logs/
+
+# IDE関連
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# システム関連
+.directory
+.Trash-*
+*~
+
+# デバッグ
+core.*
