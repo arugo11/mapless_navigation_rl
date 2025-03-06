@@ -28,7 +28,7 @@ setup(
             'rl_navigator = mapless_navigation_rl.rl_navigator:main',
             'train_agent = mapless_navigation_rl.train_agent:main',
             'evaluate_agent = mapless_navigation_rl.evaluate_agent:main',
-            'parallel_training = scripts.parallel_training:main',
+            'parallel_training = my_scripts.parallel_training:main',
         ],
     },
 )
