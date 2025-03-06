@@ -4,6 +4,8 @@ import os
 import matplotlib.pyplot as plt
 from datetime import datetime
 import time
+import random  # 追加
+import tensorflow as tf  # 追加
 
 from mapless_navigation_rl.rl_environment import TurtleBot3RLEnvironment
 from mapless_navigation_rl.dqn_agent import DQNAgent
@@ -17,6 +19,9 @@ def main(args=None):
     
     # パラメータの宣言
     node.declare_parameter('random_seed', 42)
+    node.declare_parameter('instance_id', 0)
+    node.declare_parameter('world_x', 0.0)
+    node.declare_parameter('world_y', 0.0)
     
     # パラメータの取得
     random_seed = node.get_parameter('random_seed').get_parameter_value().integer_value
@@ -27,10 +32,6 @@ def main(args=None):
     tf.random.set_seed(random_seed)
     
     node.get_logger().info(f'ランダムシード: {random_seed}')
-    
-    # 環境とエージェントの作成
-    env = TurtleBot3RLEnvironment()
-    agent = DQNAgent(env.state_size, env.action_size)
     
     # 環境とエージェントの作成
     env = TurtleBot3RLEnvironment()
@@ -83,7 +84,12 @@ def main(args=None):
                 success = info.get('success', False)
                 success_history.append(1 if success else 0)
                 
-                env.get_logger().info(
+                # 報酬がInfになることを防ぐ
+                if np.isinf(episode_reward):
+                    episode_reward = -1000  # 大きな負の値を使用
+                    node.get_logger().warn('無限大の報酬が検出されました。値を-1000に設定します。')
+                
+                node.get_logger().info(
                     f"エピソード: {e+1}/{num_episodes}, "
                     f"スコア: {episode_reward:.2f}, "
                     f"イプシロン: {agent.epsilon:.4f}, "
@@ -117,38 +123,3 @@ def main(args=None):
     # クリーンアップ
     env.destroy_node()
     rclpy.shutdown()
-    
-def _plot_metrics(scores, epsilon_history, success_history, save_dir, episode):
-    # すべてのメトリクスをプロット
-    fig, axs = plt.subplots(3, 1, figsize=(10, 15))
-    
-    # 報酬のプロット
-    axs[0].plot(scores)
-    axs[0].set_title('エピソード報酬')
-    axs[0].set_xlabel('エピソード')
-    axs[0].set_ylabel('報酬')
-    
-    # イプシロンのプロット
-    axs[1].plot(epsilon_history)
-    axs[1].set_title('探索率 (イプシロン)')
-    axs[1].set_xlabel('エピソード')
-    axs[1].set_ylabel('イプシロン')
-    
-    # 成功率のプロット (移動平均)
-    window_size = min(100, len(success_history))
-    if window_size > 0:
-        success_rate = np.convolve(success_history, 
-                                  np.ones(window_size)/window_size, 
-                                  mode='valid')
-        axs[2].plot(success_rate)
-        axs[2].set_title(f'成功率 (移動平均, ウィンドウ={window_size})')
-        axs[2].set_xlabel('エピソード')
-        axs[2].set_ylabel('成功率')
-        axs[2].set_ylim(0, 1)
-    
-    plt.tight_layout()
-    plt.savefig(f"{save_dir}/metrics_episode_{episode}.png")
-    plt.close()
-
-if __name__ == '__main__':
-    main()

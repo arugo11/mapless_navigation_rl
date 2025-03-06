@@ -96,6 +96,11 @@ class TurtleBot3RLEnvironment(Node):
         
         # 初期状態を取得
         state = self._get_state()
+
+        # ランダムな目標位置を設定した後
+        # 目標マーカーを更新
+        self.publish_goal_marker()
+
         return state
     
     def step(self, action):
@@ -206,3 +211,35 @@ class TurtleBot3RLEnvironment(Node):
         info['step'] = self.episode_step
         
         return reward, done, info
+
+    def publish_goal_marker(self):
+        """目標位置のマーカーをRvizに表示する"""
+        from visualization_msgs.msg import Marker
+        
+        goal_marker = Marker()
+        goal_marker.header.frame_id = "odom"
+        goal_marker.header.stamp = self.get_clock().now().to_msg()
+        goal_marker.ns = "goal_markers"
+        goal_marker.id = 0
+        goal_marker.type = Marker.SPHERE
+        goal_marker.action = Marker.ADD
+        
+        goal_marker.pose.position.x = self.goal_position.x
+        goal_marker.pose.position.y = self.goal_position.y
+        goal_marker.pose.position.z = 0.05  # 床より少し上に表示
+        goal_marker.pose.orientation.w = 1.0
+        
+        goal_marker.scale.x = 0.4  # サイズ設定
+        goal_marker.scale.y = 0.4
+        goal_marker.scale.z = 0.02
+        
+        goal_marker.color.r = 1.0  # 赤色
+        goal_marker.color.g = 0.0
+        goal_marker.color.b = 0.0
+        goal_marker.color.a = 0.8  # やや透明
+        
+        # マーカーを発行するためのパブリッシャー
+        if not hasattr(self, 'goal_marker_pub'):
+            self.goal_marker_pub = self.create_publisher(Marker, '/goal_marker', 10)
+        
+        self.goal_marker_pub.publish(goal_marker)
