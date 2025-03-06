@@ -31,6 +31,7 @@ class TurtleBot3RLEnvironment(Node):
         self.robot_position = Point()
         self.robot_orientation = 0.0
         self.goal_position = Point()
+        self.sim_speed_factor = 1.0
         
         # 強化学習パラメータ
         self.num_laser_samples = 24  # サンプリングするLiDARビームの数
@@ -50,6 +51,9 @@ class TurtleBot3RLEnvironment(Node):
         self.step_penalty = -0.1
         self.approach_reward = 0.5
         self.min_distance_to_goal = float('inf')
+
+        self.declare_parameter('sim_speed', 1.0)
+        self.sim_speed_factor = self.get_parameter('sim_speed').get_parameter_value().double_value
         
         # マーカー更新タイマーを追加
         self.marker_timer = self.create_timer(1.0, self.publish_goal_marker)
@@ -114,7 +118,7 @@ class TurtleBot3RLEnvironment(Node):
         # 行動を実行して待機
         self._set_action(action)
         self.episode_step += 1
-        time.sleep(0.1)  # 行動実行の時間をシミュレート
+        time.sleep(0.1 / self.sim_speed_factor)  # シミュレーション速度に応じて待機時間を調整
         
         # 現在の状態を取得し報酬を計算
         state = self._get_state()

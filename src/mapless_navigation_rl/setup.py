@@ -29,6 +29,7 @@ setup(
             'train_agent = mapless_navigation_rl.train_agent:main',
             'evaluate_agent = mapless_navigation_rl.evaluate_agent:main',
             'parallel_training = my_scripts.parallel_training:main',
+            'sim_speed_controller = mapless_navigation_rl.sim_speed_controller:main',
         ],
     },
 )

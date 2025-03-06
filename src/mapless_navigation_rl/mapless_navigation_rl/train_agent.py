@@ -22,9 +22,11 @@ def main(args=None):
     node.declare_parameter('instance_id', 0)
     node.declare_parameter('world_x', 0.0)
     node.declare_parameter('world_y', 0.0)
+    node.declare_parameter('sim_speed', 1.0)
     
     # パラメータの取得
     random_seed = node.get_parameter('random_seed').get_parameter_value().integer_value
+    sim_speed = node.get_parameter('sim_speed').get_parameter_value().double_value
     
     # ランダムシードの設定
     np.random.seed(random_seed)
@@ -35,8 +37,8 @@ def main(args=None):
     
     # 環境とエージェントの作成
     env = TurtleBot3RLEnvironment()
+    env.set_parameters([rclpy.Parameter('sim_speed', rclpy.Parameter.Type.DOUBLE, sim_speed)])
     agent = DQNAgent(env.state_size, env.action_size)
-    
     # 訓練パラメータ
     num_episodes = 1000
     

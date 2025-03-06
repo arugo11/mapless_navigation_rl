@@ -76,12 +76,35 @@ def generate_launch_description():
         ],
         output='screen'
     )
-    
+    # 速度倍率の引数を追加
+    sim_speed_arg = DeclareLaunchArgument(
+        'sim_speed',
+        default_value='1.0',
+        description='シミュレーション速度の倍率'
+    )
+
+    # 他の変数の宣言と同様に、sim_speedを追加
+    sim_speed = LaunchConfiguration('sim_speed')
+
+    # シミュレーション速度コントローラーノード
+    speed_controller_node = Node(
+        package='mapless_navigation_rl',
+        executable='sim_speed_controller',
+        name='sim_speed_controller',
+        parameters=[
+            {'speed_factor': sim_speed}
+        ],
+        output='screen'
+    )
+
+    # LaunchDescriptionに追加
     return LaunchDescription([
         random_seed_arg,
         world_x_arg,
         world_y_arg,
         instance_id_arg,
+        sim_speed_arg,
         turtlebot3_gazebo,
-        training_node
+        training_node,
+        speed_controller_node
     ])
