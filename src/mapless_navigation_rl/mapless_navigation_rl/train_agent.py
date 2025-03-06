@@ -10,6 +10,40 @@ import tensorflow as tf  # 追加
 from mapless_navigation_rl.rl_environment import TurtleBot3RLEnvironment
 from mapless_navigation_rl.dqn_agent import DQNAgent
 
+def _plot_metrics(scores, epsilon_history, success_history, save_dir, episode):
+    # すべてのメトリクスをプロット
+    fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+    
+    # 報酬のプロット
+    axs[0].plot(scores)
+    axs[0].set_title('エピソード報酬')
+    axs[0].set_xlabel('エピソード')
+    axs[0].set_ylabel('報酬')
+    
+    # イプシロンのプロット
+    axs[1].plot(epsilon_history)
+    axs[1].set_title('探索率 (イプシロン)')
+    axs[1].set_xlabel('エピソード')
+    axs[1].set_ylabel('イプシロン')
+    
+    # 成功率のプロット (移動平均)
+    window_size = min(10, len(success_history))  # 小さな窓サイズから始める
+    if window_size > 0:
+        success_rate = np.convolve(success_history, 
+                                  np.ones(window_size)/window_size, 
+                                  mode='valid')
+        axs[2].plot(success_rate)
+        axs[2].set_title(f'成功率 (移動平均, ウィンドウ={window_size})')
+        axs[2].set_xlabel('エピソード')
+        axs[2].set_ylabel('成功率')
+        axs[2].set_ylim(0, 1)
+    
+    plt.tight_layout()
+    try:
+        plt.savefig(f"{save_dir}/metrics_episode_{episode}.png")
+    except Exception as e:
+        print(f"グラフの保存中にエラーが発生しました: {e}")
+    plt.close()
 def main(args=None):
     # ROS2の初期化
     rclpy.init(args=args)
