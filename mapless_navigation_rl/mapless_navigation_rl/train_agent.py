@@ -12,6 +12,26 @@ def main(args=None):
     # ROS2の初期化
     rclpy.init(args=args)
     
+    # トレーニングノードを作成
+    node = rclpy.create_node('train_agent')
+    
+    # パラメータの宣言
+    node.declare_parameter('random_seed', 42)
+    
+    # パラメータの取得
+    random_seed = node.get_parameter('random_seed').get_parameter_value().integer_value
+    
+    # ランダムシードの設定
+    np.random.seed(random_seed)
+    random.seed(random_seed)
+    tf.random.set_seed(random_seed)
+    
+    node.get_logger().info(f'ランダムシード: {random_seed}')
+    
+    # 環境とエージェントの作成
+    env = TurtleBot3RLEnvironment()
+    agent = DQNAgent(env.state_size, env.action_size)
+    
     # 環境とエージェントの作成
     env = TurtleBot3RLEnvironment()
     agent = DQNAgent(env.state_size, env.action_size)
