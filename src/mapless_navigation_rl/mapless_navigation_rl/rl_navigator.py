@@ -8,6 +8,7 @@ from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker  # マーカー用に追加
 import tf2_ros
 
 from mapless_navigation_rl.dqn_agent import DQNAgent
@@ -31,6 +32,8 @@ class RLNavigator(Node):
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.status_pub = self.create_publisher(String, '/rl_status', 10)
+        # 目標マーカー用のパブリッシャーを追加
+        self.goal_marker_pub = self.create_publisher(Marker, '/goal_marker', 10)
         
         # 変数の初期化
         self.scan_ranges = []
@@ -53,11 +56,49 @@ class RLNavigator(Node):
         self.agent = DQNAgent(self.state_size, self.action_size)
         self.load_agent()
         
+        # 目標マーカーの発行
+        self.publish_goal_marker()
+        
         # 行動実行用タイマー
         self.timer = self.create_timer(0.1, self.execute_action)
+        # マーカー更新用タイマー
+        self.marker_timer = self.create_timer(1.0, self.publish_goal_marker)
         
         self.get_logger().info('RLナビゲーターノード初期化完了!')
         self.get_logger().info(f'目標位置: x={self.goal_position.x}, y={self.goal_position.y}')
+    
+    def publish_goal_marker(self):
+        # 目標位置のマーカーを作成
+        marker = Marker()
+        marker.header.frame_id = "odom"  # オドメトリフレームを基準
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "navigation_goals"
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        
+        # マーカーの位置
+        marker.pose.position.x = self.goal_position.x
+        marker.pose.position.y = self.goal_position.y
+        marker.pose.position.z = 0.1  # 地面よりわずかに上に表示
+        marker.pose.orientation.w = 1.0
+        
+        # マーカーのサイズ
+        marker.scale.x = 0.3
+        marker.scale.y = 0.3
+        marker.scale.z = 0.3
+        
+        # マーカーの色 (赤)
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        
+        # マーカーの寿命 (永続)
+        marker.lifetime.sec = 0
+        
+        # マーカーを発行
+        self.goal_marker_pub.publish(marker)
     
     def load_agent(self):
         # 訓練済みモデルのロード
