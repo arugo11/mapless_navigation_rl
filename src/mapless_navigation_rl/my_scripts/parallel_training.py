@@ -21,7 +21,7 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-def run_training_instance(instance_id, num_episodes, log_dir, custom_args=None):
+def run_training_instance(instance_id, num_episodes, log_dir, random_seed=42):
     """指定されたIDでトレーニングインスタンスを実行"""
     
     # ROS_DOMAIN_IDを設定して各プロセスが独立したROSネットワークを持つようにする
@@ -34,13 +34,9 @@ def run_training_instance(instance_id, num_episodes, log_dir, custom_args=None):
     
     # ros2 launch コマンドを構築
     cmd = [
-        "ros2", "launch", "mapless_navigation_rl", "training.launch.py"
+        "ros2", "launch", "mapless_navigation_rl", "training.launch.py",
+        f"random_seed:={random_seed}"  # 正しい形式でパラメータを渡す
     ]
-    
-    # カスタム引数があれば追加
-    if custom_args:
-        for arg in custom_args:
-            cmd.append(arg)
     
     # プロセスを開始
     log_file = open(f"{log_dir}/training_instance_{instance_id}.log", "w")
@@ -82,10 +78,10 @@ def main():
         results = []
         for i in range(args.num_instances):
             # それぞれのインスタンスに異なるシード値を設定
-            custom_args = ["--ros-args", "-p", f"random_seed:={i*100}"]
+            random_seed = i * 100
             result = pool.apply_async(
                 run_training_instance,
-                args=(i, args.num_episodes, log_dir, custom_args)
+                args=(i, args.num_episodes, log_dir, random_seed)
             )
             results.append(result)
             
