@@ -1,3 +1,4 @@
+import rclpy
 from rclpy.node import Node
 import numpy as np
 import time
@@ -55,9 +56,15 @@ class TurtleBot3RLEnvironment(Node):
         
         # すべてのサブスクライバーとパブリッシャーの準備を待つ
         self.get_logger().info('ROSトピックの準備中...')
-        time.sleep(2)
+        # トピックの準備を待つ
+        self.get_logger().info('ROSトピックの準備中...')
+        while not self.cmd_vel_pub.get_subscription_count() > 0 or \
+              not self.scan_sub.get_publisher_count() > 0 or \
+              not self.odom_sub.get_publisher_count() > 0:
+            rclpy.spin_once(self, timeout_sec=0.1)
         self.get_logger().info('環境の初期化完了!')
-    
+        self.get_logger().info('環境の初期化完了!')
+        
     def scan_callback(self, msg):
         # LaserScanメッセージの処理
         if len(msg.ranges) == 0:
@@ -78,7 +85,6 @@ class TurtleBot3RLEnvironment(Node):
             min(self.scan_ranges[int(i * angle_increment) % len(self.scan_ranges)], 3.5) 
             for i in range(self.num_laser_samples)
         ])
-    
     def odom_callback(self, msg):
         # ロボットの位置と方向を取得
         self.robot_position = msg.pose.pose.position
@@ -94,16 +100,20 @@ class TurtleBot3RLEnvironment(Node):
         self.episode_step = 0
         self.min_distance_to_goal = float('inf')
         
-        # シミュレーションのリセットを同期的に実行
+        # シミュレーションのリセット
         while not self.reset_simulation_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('リセットサービスを待機中...')
         
-        # 同期的にリセットを実行して完了を待つ
+        # リセットリクエストを非同期に送信
         future = self.reset_simulation_client.call_async(Empty.Request())
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        time.sleep(0.5)  # 追加の待機時間
         
-        # ランダムな目標位置を設定
+        # フューチャーが完了するまで待機
+        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        
+        # リセット後に少し待機して安定させる
+        time.sleep(1.0)
+        
+        # ランダムな目標位置を設定 (妥当な範囲内)
         self.goal_position.x = random.uniform(1.0, 3.0)
         self.goal_position.y = random.uniform(-1.5, 1.5)
         self.goal_position.z = 0.0
@@ -127,7 +137,7 @@ class TurtleBot3RLEnvironment(Node):
             # コールバックを処理
             rclpy.spin_once(self, timeout_sec=0.1)
             
-            # LiDARデータとオドメトリが更新されているか確認
+            # LiDARデータが更新されているか確認
             if len(self.scan_ranges) > 0:
                 return True
             
@@ -135,7 +145,6 @@ class TurtleBot3RLEnvironment(Node):
         
         self.get_logger().warn('センサーデータの更新を待機中にタイムアウトしました')
         return False
-        
     def step(self, action):
         # 行動を実行して待機
         self._set_action(action)
