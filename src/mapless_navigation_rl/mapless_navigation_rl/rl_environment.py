@@ -60,14 +60,22 @@ class TurtleBot3RLEnvironment(Node):
     
     def scan_callback(self, msg):
         # LaserScanメッセージの処理
+        if len(msg.ranges) == 0:
+            self.get_logger().warn('空のLaserScanメッセージを受信しました')
+            return
+            
         self.scan_ranges = np.array(msg.ranges)
-        self.min_obstacle_distance = min(min(self.scan_ranges), 3.5)  # 3.5mで上限設定
+        
+        # 無効な値（NaN、Infなど）を処理
+        self.scan_ranges = np.nan_to_num(self.scan_ranges, nan=3.5, posinf=3.5, neginf=0.1)
+        
+        self.min_obstacle_distance = min(np.min(self.scan_ranges), 3.5)  # 3.5mで上限設定
         
         # LiDARスキャンをサンプリングして状態に使用
         angle_increment = len(self.scan_ranges) / self.num_laser_samples
         
         self.scan_processed = np.array([
-            min(self.scan_ranges[int(i * angle_increment)], 3.5) 
+            min(self.scan_ranges[int(i * angle_increment) % len(self.scan_ranges)], 3.5) 
             for i in range(self.num_laser_samples)
         ])
     
@@ -223,11 +231,17 @@ class TurtleBot3RLEnvironment(Node):
             # 各ステップに小さなペナルティを与え、より速い解決を促す
             reward += self.step_penalty
             
-            # 目標に近づくことに対する報酬 - 無限大になる可能性があるため修正
-            if distance_to_goal < self.min_distance_to_goal:
-                # 差分に上限を設ける
-                distance_diff = min(self.min_distance_to_goal - distance_to_goal, 1.0)
+            # 目標に近づくことに対する報酬 - より安定した方法
+            if hasattr(self, 'previous_distance') and self.previous_distance > 0:
+                # 前回の距離との差分で報酬を計算（前進するほど報酬が大きい）
+                distance_diff = self.previous_distance - distance_to_goal
                 reward += self.approach_reward * distance_diff
+            
+            # 現在の距離を記録
+            self.previous_distance = distance_to_goal
+            
+            # 最も近い距離を更新
+            if distance_to_goal < self.min_distance_to_goal:
                 self.min_distance_to_goal = distance_to_goal
             
             # 障害物に近すぎる場合の小さなペナルティ
