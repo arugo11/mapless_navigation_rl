@@ -1,7 +1,6 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-import time
 import math
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
@@ -31,6 +30,7 @@ class TurtleBot3RLEnvironment(Node):
         self.robot_position = Point()
         self.robot_orientation = 0.0
         self.goal_position = Point()
+        self.last_position = None
         
         # 強化学習パラメータ
         self.num_laser_samples = 24  # サンプリングするLiDARビームの数
@@ -50,21 +50,16 @@ class TurtleBot3RLEnvironment(Node):
         self.step_penalty = -0.1
         self.approach_reward = 0.5
         self.min_distance_to_goal = float('inf')
+        self.previous_distance = None
         
         # マーカー更新タイマーを追加
         self.marker_timer = self.create_timer(1.0, self.publish_goal_marker)
         
         # すべてのサブスクライバーとパブリッシャーの準備を待つ
         self.get_logger().info('ROSトピックの準備中...')
-        # トピックの準備を待つ
-        self.get_logger().info('ROSトピックの準備中...')
-        while not self.cmd_vel_pub.get_subscription_count() > 0 or \
-              not self.scan_sub.get_publisher_count() > 0 or \
-              not self.odom_sub.get_publisher_count() > 0:
-            rclpy.spin_once(self, timeout_sec=0.1)
+        self._wait_for_topics()
         self.get_logger().info('環境の初期化完了!')
-        self.get_logger().info('環境の初期化完了!')
-        
+
     def scan_callback(self, msg):
         # LaserScanメッセージの処理
         if len(msg.ranges) == 0:
@@ -79,12 +74,14 @@ class TurtleBot3RLEnvironment(Node):
         self.min_obstacle_distance = min(np.min(self.scan_ranges), 3.5)  # 3.5mで上限設定
         
         # LiDARスキャンをサンプリングして状態に使用
-        angle_increment = len(self.scan_ranges) / self.num_laser_samples
-        
-        self.scan_processed = np.array([
-            min(self.scan_ranges[int(i * angle_increment) % len(self.scan_ranges)], 3.5) 
-            for i in range(self.num_laser_samples)
-        ])
+        if len(self.scan_ranges) > 0:
+            angle_increment = len(self.scan_ranges) / self.num_laser_samples
+            
+            self.scan_processed = np.array([
+                min(self.scan_ranges[int(i * angle_increment) % len(self.scan_ranges)], 3.5) 
+                for i in range(self.num_laser_samples)
+            ])
+    
     def odom_callback(self, msg):
         # ロボットの位置と方向を取得
         self.robot_position = msg.pose.pose.position
@@ -95,23 +92,45 @@ class TurtleBot3RLEnvironment(Node):
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
         self.robot_orientation = math.atan2(siny_cosp, cosy_cosp)  # ヨー角
         
+        # 位置の追跡
+        if self.last_position is None:
+            self.last_position = (self.robot_position.x, self.robot_position.y)
+    
+    def _wait_for_topics(self):
+        """センサーデータが利用可能になるまで待機"""
+        # 最大待機回数
+        max_attempts = 50
+        
+        # センサーデータが利用可能になるまで待機
+        for i in range(max_attempts):
+            # コールバックを処理
+            rclpy.spin_once(self, timeout_sec=0.1)
+            
+            # LaserScanとOdometryが更新されているか確認
+            if len(self.scan_ranges) > 0 and (self.robot_position.x != 0 or self.robot_position.y != 0):
+                self.get_logger().info('センサーデータが利用可能になりました')
+                return
+            
+        self.get_logger().warn('センサーデータの待機中にタイムアウトしました')
+    
     def reset(self):
         # 環境のリセット
         self.episode_step = 0
         self.min_distance_to_goal = float('inf')
+        self.previous_distance = None
+        self.last_position = None
         
         # シミュレーションのリセット
         while not self.reset_simulation_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('リセットサービスを待機中...')
         
-        # リセットリクエストを非同期に送信
+        # リセットリクエストを送信し、完了を待機
         future = self.reset_simulation_client.call_async(Empty.Request())
-        
-        # フューチャーが完了するまで待機
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
         
-        # リセット後に少し待機して安定させる
-        time.sleep(1.0)
+        # シミュレーションが安定するまで少し待機
+        for _ in range(20):
+            rclpy.spin_once(self, timeout_sec=0.01)
         
         # ランダムな目標位置を設定 (妥当な範囲内)
         self.goal_position.x = random.uniform(1.0, 3.0)
@@ -135,25 +154,56 @@ class TurtleBot3RLEnvironment(Node):
         max_attempts = 10
         for i in range(max_attempts):
             # コールバックを処理
-            rclpy.spin_once(self, timeout_sec=0.1)
+            rclpy.spin_once(self, timeout_sec=0.01)
             
             # LiDARデータが更新されているか確認
             if len(self.scan_ranges) > 0:
                 return True
             
-            time.sleep(0.1)
+            # 短い待機
+            for _ in range(5):
+                rclpy.spin_once(self, timeout_sec=0.01)
         
         self.get_logger().warn('センサーデータの更新を待機中にタイムアウトしました')
         return False
+    
     def step(self, action):
-        # 行動を実行して待機
+        # 行動を実行
         self._set_action(action)
         self.episode_step += 1
-        time.sleep(0.1)  # 行動実行の時間をシミュレート
+        
+        # 現在の位置を記録
+        start_position = (self.robot_position.x, self.robot_position.y)
+        
+        # ロボットが十分に移動するか、最大スピン回数に達するまで待機
+        moved_enough = False
+        spin_count = 0
+        min_movement = 0.01  # 1cm以上の移動を待つ
+        max_spins = 30       # 最大スピン回数（安全のため）
+        
+        while not moved_enough and spin_count < max_spins:
+            # コールバックを処理
+            rclpy.spin_once(self, timeout_sec=0.001)
+            
+            # 現在位置を取得
+            current_position = (self.robot_position.x, self.robot_position.y)
+            
+            # 移動距離を計算
+            dist_moved = math.sqrt((current_position[0] - start_position[0])**2 + 
+                                  (current_position[1] - start_position[1])**2)
+            
+            # 十分に移動したかチェック
+            if dist_moved >= min_movement:
+                moved_enough = True
+            
+            spin_count += 1
         
         # 現在の状態を取得し報酬を計算
         state = self._get_state()
         reward, done, info = self._compute_reward()
+        
+        # 次のステップのために現在位置を更新
+        self.last_position = (self.robot_position.x, self.robot_position.y)
         
         return state, reward, done, info
     
@@ -241,9 +291,9 @@ class TurtleBot3RLEnvironment(Node):
             reward += self.step_penalty
             
             # 目標に近づくことに対する報酬 - より安定した方法
-            if hasattr(self, 'previous_distance') and self.previous_distance > 0:
-                # 前回の距離との差分で報酬を計算（前進するほど報酬が大きい）
-                distance_diff = self.previous_distance - distance_to_goal
+            if self.previous_distance is not None:
+                # 差分に上限を設ける
+                distance_diff = min(self.previous_distance - distance_to_goal, 1.0)
                 reward += self.approach_reward * distance_diff
             
             # 現在の距離を記録
