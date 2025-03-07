@@ -110,17 +110,25 @@ class RLNavigator(Node):
     
     def scan_callback(self, msg):
         # LaserScanメッセージの処理
+        if len(msg.ranges) == 0:
+            self.get_logger().warn('空のLaserScanメッセージを受信しました')
+            return
+            
         self.scan_ranges = np.array(msg.ranges)
-        self.min_obstacle_distance = min(min(self.scan_ranges), 3.5)  # 3.5mで上限設定
+        
+        # 無効な値（NaN、Infなど）を処理
+        self.scan_ranges = np.nan_to_num(self.scan_ranges, nan=3.5, posinf=3.5, neginf=0.1)
+        
+        self.min_obstacle_distance = min(np.min(self.scan_ranges), 3.5)  # 3.5mで上限設定
         
         # LiDARスキャンをサンプリングして状態に使用
         angle_increment = len(self.scan_ranges) / self.num_laser_samples
         
         self.scan_processed = np.array([
-            min(self.scan_ranges[int(i * angle_increment)], 3.5) 
+            min(self.scan_ranges[int(i * angle_increment) % len(self.scan_ranges)], 3.5) 
             for i in range(self.num_laser_samples)
         ])
-    
+        
     def odom_callback(self, msg):
         # ロボットの位置と方向を取得
         self.robot_position = msg.pose.pose.position
