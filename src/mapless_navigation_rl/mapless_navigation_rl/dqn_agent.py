@@ -12,13 +12,14 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         
-        # ハイパーパラメータ
+        # ハイパーパラメータの調整
         self.gamma = 0.99  # 割引率
         self.epsilon = 1.0  # 探索率
         self.epsilon_min = 0.05
-        self.epsilon_decay = 0.995
+        self.epsilon_decay = 0.9995  # より緩やかな減衰
         self.learning_rate = 0.001
-        self.update_target_frequency = 5  # ターゲットネットワークの更新頻度
+        self.update_target_frequency = 1000  # ステップ単位での更新に変更
+        self.target_update_counter = 0
         
         # メモリ (経験再生バッファ)
         self.memory = deque(maxlen=100000)
@@ -85,6 +86,12 @@ class DQNAgent:
         history = self.model.fit(states, target_f, epochs=1, verbose=0)
         self.loss_history.append(history.history['loss'][0])
         
+        # ターゲットネットワークの更新カウンター
+        self.target_update_counter += 1
+        if self.target_update_counter >= self.update_target_frequency:
+            self.update_target_model()
+            self.target_update_counter = 0
+            
         # 探索と活用のトレードオフのためにイプシロンを減衰
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay

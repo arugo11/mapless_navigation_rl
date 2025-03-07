@@ -30,10 +30,10 @@ def main(args=None):
     np.random.seed(random_seed)
     random.seed(random_seed)
     tf.random.set_seed(random_seed)
-    
+        
     node.get_logger().info(f'ランダムシード: {random_seed}')
     
-    # 環境とエージェントの作成
+    # 環境とエージェントの作成（ここに追加！）
     env = TurtleBot3RLEnvironment()
     agent = DQNAgent(env.state_size, env.action_size)
     
@@ -65,6 +65,9 @@ def main(args=None):
             
             # 環境内で行動を実行
             next_state, reward, done, info = env.step(action)
+            
+            # ROS2コールバックを処理（ここに追加！）
+            rclpy.spin_once(env, timeout_sec=0.01)
             
             # エージェントのメモリに経験を保存
             agent.memorize(state, action, reward, next_state, done)
