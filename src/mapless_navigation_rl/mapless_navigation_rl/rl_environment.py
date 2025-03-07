@@ -1,4 +1,3 @@
-import rclpy
 from rclpy.node import Node
 import numpy as np
 import time
@@ -81,35 +80,54 @@ class TurtleBot3RLEnvironment(Node):
         siny_cosp = 2 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
         self.robot_orientation = math.atan2(siny_cosp, cosy_cosp)  # ヨー角
-    
+        
     def reset(self):
         # 環境のリセット
         self.episode_step = 0
         self.min_distance_to_goal = float('inf')
         
-        # シミュレーションのリセット
+        # シミュレーションのリセットを同期的に実行
         while not self.reset_simulation_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('リセットサービスを待機中...')
         
-        self.reset_simulation_client.call_async(Empty.Request())
-        time.sleep(1.0)  # シミュレーションのリセット待ち
+        # 同期的にリセットを実行して完了を待つ
+        future = self.reset_simulation_client.call_async(Empty.Request())
+        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        time.sleep(0.5)  # 追加の待機時間
         
-        # ランダムな目標位置を設定 (妥当な範囲内)
+        # ランダムな目標位置を設定
         self.goal_position.x = random.uniform(1.0, 3.0)
         self.goal_position.y = random.uniform(-1.5, 1.5)
         self.goal_position.z = 0.0
         
         self.get_logger().info(f'新しい目標設定: x={self.goal_position.x:.2f}, y={self.goal_position.y:.2f}')
         
-        # 初期状態を取得
-        state = self._get_state()
-
-        # ランダムな目標位置を設定した後
         # 目標マーカーを更新
         self.publish_goal_marker()
-
+        
+        # センサーデータが更新されるまで待機
+        self._wait_for_sensor_data()
+        
+        # 初期状態を取得
+        state = self._get_state()
         return state
-    
+
+    def _wait_for_sensor_data(self):
+        """センサーデータが更新されるまで待機する"""
+        max_attempts = 10
+        for i in range(max_attempts):
+            # コールバックを処理
+            rclpy.spin_once(self, timeout_sec=0.1)
+            
+            # LiDARデータとオドメトリが更新されているか確認
+            if len(self.scan_ranges) > 0:
+                return True
+            
+            time.sleep(0.1)
+        
+        self.get_logger().warn('センサーデータの更新を待機中にタイムアウトしました')
+        return False
+        
     def step(self, action):
         # 行動を実行して待機
         self._set_action(action)
